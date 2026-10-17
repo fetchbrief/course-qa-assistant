@@ -1,0 +1,7 @@
+# TODO(模块一): 换成组委会给的模型路径，并把 model_loaded 置 True
+base_model_path: models/base_model
+embedding_model_path: models/embedding_model
+device: cpu
+precision: fp32
+deterministic: true
+max_context_tokens: 2048

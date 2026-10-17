@@ -1,0 +1,6 @@
+# TODO(模块二): 这几个是"回答稳不稳"的关键参数
+max_new_tokens: 256
+temperature: 0.1
+top_p: 0.9
+stop: ["\n\n用户：", "</s>"]
+system_prompt_file: prompts/system.txt

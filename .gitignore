@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# 运行产物
+logs/
+env_check.json
+*.out
+
+# 本地参考资料（官方比赛文档，不随项目公开）
+docs/
+
+# 学习练习（不属于项目本身）
+练习_*.py
+run1.bat
+run2.bat
+run3.bat
+run_server.bat

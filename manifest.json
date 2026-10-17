@@ -1,0 +1,17 @@
+{
+  "name": "course-qa-assistant",
+  "version": "0.1.0-skeleton",
+  "entry": "app.py",
+  "start_command": "python app.py --host 0.0.0.0 --port 8000",
+  "host": "0.0.0.0",
+  "port": 8000,
+  "framework": "fastapi",
+  "endpoints": {
+    "health": "GET /health",
+    "answer": "POST /answer",
+    "batch_answer": "POST /batch_answer",
+    "web": "GET /"
+  },
+  "env_check": "env_check.json",
+  "log": "logs/app.jsonl"
+}
