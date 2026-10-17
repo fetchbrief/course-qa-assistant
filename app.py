@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -126,8 +127,12 @@ class BatchAnswerRequest(BaseModel):
 EMBED_MODEL_NAME = "BAAI/bge-small-zh-v1.5"   # 本地替代品；比赛用官方给的 models/embedding_model
 SIM_THRESHOLD = 0.45                            # 低于这条线 → 不收 → 上层拒答
 
+CHUNK_MAX = 400          # 每段最多多少字
+CHUNK_OVERLAP = 80       # 相邻两段重叠多少字（约 20%，避免一刀切断语义）
+
 _embedder = None
-_doc_vectors = []
+_chunks = []             # [{"id","title","text"}]  一段一条
+_chunk_vectors = []
 
 
 def _embedder_instance():
@@ -138,16 +143,61 @@ def _embedder_instance():
     return _embedder
 
 
+def split_doc(text: str):
+    """把一篇文档切成若干段。
+
+    规则（按顺序）：
+      1. 有 '## 小标题' → 按小标题切
+      2. 没小标题 → 整篇当一段
+      3. 某段仍超过 CHUNK_MAX → 按长度硬切，相邻段重叠 CHUNK_OVERLAP 字
+    """
+    pieces = []
+    if "\n## " in text or text.startswith("## "):
+        parts = re.split(r"\n?## ", text)
+        head = parts[0].strip()
+        if head:
+            pieces.append(("", head))
+        for p in parts[1:]:
+            label, _, body = p.partition("\n")
+            body = (label + "\n" + body).strip()
+            if body:
+                pieces.append(("## " + label.strip(), body))
+    else:
+        pieces.append(("", text.strip()))
+
+    out = []
+    for label, body in pieces:
+        if len(body) <= CHUNK_MAX:
+            out.append((label, body))
+        else:
+            start = 0
+            while start < len(body):
+                out.append((label, body[start:start + CHUNK_MAX]))
+                start += CHUNK_MAX - CHUNK_OVERLAP
+    return out
+
+
 def build_index():
-    """把所有文档各算一次向量，存进内存（只算一次，别每次现算）。"""
-    global _doc_vectors, INDEX_LOADED
-    if not KNOWLEDGE:
-        _doc_vectors = []
+    """把每篇文档切成段，每段算一次向量，存进内存（只算一次）。"""
+    global _chunks, _chunk_vectors, INDEX_LOADED
+    _chunks, texts = [], []
+    for d in KNOWLEDGE:
+        for label, body in split_doc(d["text"]):
+            _chunks.append({
+                "id": d["id"],
+                "title": f"{d['title']} · {label}" if label else d["title"],
+                "text": body,
+            })
+            texts.append(body)
+
+    if not texts:
+        _chunk_vectors = []
         return
+
     emb = _embedder_instance()
-    _doc_vectors = [np.asarray(v) for v in emb.embed([d["text"] for d in KNOWLEDGE])]
+    _chunk_vectors = [np.asarray(v) for v in emb.embed(texts)]
     INDEX_LOADED = True
-    log.info(f"索引建好：{len(_doc_vectors)} 篇文档")
+    log.info(f"索引建好：{len(_chunks)} 段（来自 {len(KNOWLEDGE)} 篇文档）")
 
 
 def _cosine(a, b):
@@ -158,20 +208,28 @@ def _cosine(a, b):
 
 
 def retrieve(question: str, top_k: int):
-    """向量检索：算问题向量 → 和每篇文档算余弦 → 过阈值的排序取前 top_k。"""
-    if not _doc_vectors:
+    """向量检索：问题向量 → 和每一【段】算余弦 → 过阈值 → 按文档去重 → 取前 top_k。"""
+    if not _chunk_vectors:
         return []
 
     q = np.asarray(list(_embedder_instance().embed([question]))[0])
 
     scored = []
-    for d, v in zip(KNOWLEDGE, _doc_vectors):
+    for ch, v in zip(_chunks, _chunk_vectors):
         s = _cosine(q, v)
         if s >= SIM_THRESHOLD:                  # 不够像的，直接不收 → 上层会拒答
-            scored.append(Source(id=d["id"], title=d["title"], score=round(s, 4)))
+            scored.append(Source(id=ch["id"], title=ch["title"], score=round(s, 4)))
 
     scored.sort(key=lambda x: x.score, reverse=True)
-    return scored[:top_k]
+
+    # 同一篇文档可能有多段命中，只保留分最高的那段
+    seen, deduped = set(), []
+    for s in scored:
+        if s.id in seen:
+            continue
+        seen.add(s.id)
+        deduped.append(s)
+    return deduped[:top_k]
 
 
 build_index()
