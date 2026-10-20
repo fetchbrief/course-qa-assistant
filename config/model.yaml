@@ -1,6 +1,14 @@
-# TODO(模块一): 换成组委会给的模型路径，并把 model_loaded 置 True
+# 模型配置 —— 改这里，不用改代码
+#
+# 比赛环境：用官方给的路径
+# 本地开发：path 不存在时，自动退回 embedding_model_name
+
 base_model_path: models/base_model
 embedding_model_path: models/embedding_model
+
+# 本地替代品（比赛时官方路径存在，就用官方的；本地没有，用这个）
+embedding_model_name: BAAI/bge-small-zh-v1.5
+
 device: cpu
 precision: fp32
 deterministic: true

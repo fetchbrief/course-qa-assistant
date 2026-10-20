@@ -1,4 +1,5 @@
 [
   {"id": "refund_policy", "title": "退费政策", "path": "knowledge/refund_policy.md", "category": "refund_policy", "version": "2026.1", "effective_date": "2026-03-01"},
-  {"id": "certificate",   "title": "结业证书", "path": "knowledge/certificate.md",   "category": "certificate",   "version": "2026.1", "effective_date": "2026-03-01"}
+  {"id": "certificate",   "title": "结业证书", "path": "knowledge/certificate.md",   "category": "certificate",   "version": "2026.1", "effective_date": "2026-03-01"},
+  {"id": "学员手册",       "title": "学员手册", "path": "knowledge/学员手册.md",      "category": "handbook",      "version": "2026.1", "effective_date": "2026-03-01"}
 ]

@@ -1,5 +1,18 @@
-# TODO(模块二): 这几个是"回答稳不稳"的关键参数
-max_new_tokens: 256
+# 生成配置 —— 模型怎么写答案
+
+# 后端选择：
+#   mock      —— 不联网，用规则拼一句话。本地开发/测试用，零成本
+#   anthropic —— 调 Anthropic 兼容接口（生产用）
+#   （比赛时改成本地模型，指向组委会给的路径）
+backend: mock
+
+# anthropic 后端参数
+base_url: https://api.deepseek.com/anthropic
+model: deepseek-flash
+api_key_env: ANTHROPIC_API_KEY     # 只写"变量名"，绝不写密钥本身
+timeout_s: 30
+
+max_new_tokens: 512     # 推理型模型会先花一部分在"思考"上，留少了会一个字答案都没有
 temperature: 0.1
 top_p: 0.9
 stop: ["\n\n用户：", "</s>"]
