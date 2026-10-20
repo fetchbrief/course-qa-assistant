@@ -159,6 +159,7 @@ SIM_THRESHOLD = float(RETR_CFG.get("sim_threshold", 0.45))   # 低于这条线 �
 CHUNK_MAX = int(RETR_CFG.get("chunk_max", 400))
 CHUNK_OVERLAP = int(RETR_CFG.get("chunk_overlap", 80))
 DEFAULT_TOP_K = int(RETR_CFG.get("top_k_default", 3))
+SOURCE_REL_RATIO = float(RETR_CFG.get("source_rel_ratio", 0.85))
 
 _embedder = None
 _chunks = []             # [{"id","title","text"}]  一段一条
@@ -253,6 +254,12 @@ def retrieve(question: str, top_k: int):
 
     scored.sort(key=lambda x: x.score, reverse=True)
 
+    # 相对阈值：和最高分差太远的，不算同一条证据。
+    # 不加这一步，top_k=3 会把"勉强过线但根本不相关"的文档一起塞给模型。
+    if scored:
+        cut = scored[0].score * SOURCE_REL_RATIO
+        scored = [s for s in scored if s.score >= cut]
+
     # 同一篇文档可能有多段命中，只保留分最高的那段
     seen, deduped = set(), []
     for s in scored:
@@ -268,8 +275,22 @@ build_index()
 # 段标题 → 段正文。检索只返回标题和分数，生成时要拿正文拼 Prompt。
 _CHUNK_TEXT = {c["title"]: c["text"] for c in _chunks}
 
-# 模型说这句话时，把它当"拒答"处理（和 system prompt 里的说法保持一致）
-REFUSAL_MARK = "超出了本站课程咨询范围"
+# 模型说这些话时，把它当"拒答"处理。
+# ⚠️ 靠字符串匹配判断"是不是拒答"本身是不可靠的 —— 模型可能换个说法。
+#    更稳的做法是让模型输出结构化字段（模块二可以改进）。这里先覆盖常见说法。
+REFUSAL_MARKS = (
+    "超出了本站课程咨询范围",
+    "无法回答",
+    "不知道",
+    "未提及",
+    "没有提到",
+    "未包含",
+    "没有相关",
+)
+
+
+def _is_refusal(text: str) -> bool:
+    return any(m in text for m in REFUSAL_MARKS)
 
 
 # ---------------------------------------------------------------- 缓存
@@ -408,8 +429,11 @@ def answer_one(req: AnswerRequest) -> AnswerResponse:
             if not ans:
                 raise RuntimeError("模型返回空内容")
             # 模型自己说"超出范围"时，响应字段也要跟着是 True —— 否则前端看到的和实际内容对不上
-            if REFUSAL_MARK and REFUSAL_MARK in ans:
+            if _is_refusal(ans):
                 intent, conf, refused = "out_of_scope", 0.0, True
+                # 官方样题要求：拒答时「不返回来源」。
+                # 拒答了还把来源挂上去，等于告诉用户"我找到了但我不说"，会扣分。
+                sources = []
             else:
                 intent, conf, refused = "course_query", 0.5, False
         except Exception:
